@@ -41,8 +41,8 @@ def produce_train_data(train_query_path, train_relay_path, train_path, eval_path
                 f_eval.write(instance)
 
 if __name__ == "__main__":
-    train_query_path = "data/train/train.query.tsv"
-    train_relay_path = "data/train/train.reply.tsv"
+    train_query_path = "data/query.tsv"
+    train_relay_path = "data/reply.tsv"
     train_path = "data/train/train.txt"
     eval_path = "data/eval/eval.txt"
     produce_train_data(train_query_path, train_relay_path, train_path, eval_path)
