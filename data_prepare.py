@@ -4,14 +4,14 @@ from collections import defaultdict
 def produce_train_data(train_query_path, train_relay_path, train_path):
 
     querys = {}
-    with open(train_query_path) as f:
+    with open(train_query_path, encoding="utf-8") as f:
         for line in f:
             query_id, query = line.strip().split('\t')
             querys[query_id] = query
 
     query_replays = defaultdict(dict)
     max_answer_num = 0
-    with open(train_relay_path) as f:
+    with open(train_relay_path, encoding="utf-8") as f:
         for line in f:
             query_id, replay_id, replay, label = line.strip().split('\t')
             max_answer_num = max(max_answer_num, int(replay_id)+1) # 记录最大答案个数
@@ -26,7 +26,7 @@ def produce_train_data(train_query_path, train_relay_path, train_path):
     for query_id in range(3):
         print("query_id: ", query_id, query_replays[str(query_id)])
 
-    with open(train_path, 'w') as f:
+    with open(train_path, 'w', encoding="utf-8") as f:
         for query_id in query_replays.keys():
             sentences = query_replays[query_id]['Sentences']
             labels = query_replays[query_id]['Labels']
