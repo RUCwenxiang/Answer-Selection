@@ -1,3 +1,4 @@
+# -*- coding: UTF-8 -*-
 from collections import defaultdict
 
 def produce_train_data(train_query_path, train_relay_path, train_path):
