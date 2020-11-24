@@ -158,11 +158,11 @@ class InputFeatures(object):
                segment_ids,
                answer_num,
                label_ids):
-    self.input_ids = input_ids      # batch_size * max_answer_num * max_seq_len
-    self.input_mask = input_mask    # batch_size * max_answer_num * max_seq_len
-    self.segment_ids = segment_ids  # batch_size * max_answer_num * max_seq_len
-    self.answer_num = answer_num    # batch_size
-    self.label_ids = label_ids        # batch_size * max_answer_num
+    self.input_ids = input_ids      # (batch_size, max_answer_num * max_seq_len)
+    self.input_mask = input_mask    # (batch_size, max_answer_num * max_seq_len)
+    self.segment_ids = segment_ids  # (batch_size, max_answer_num * max_seq_len)
+    self.answer_num = answer_num    # (batch_size,)
+    self.label_ids = label_ids      # (batch_size, max_answer_num)
 
 
 class DataProcessor(object):
@@ -187,7 +187,7 @@ class DataProcessor(object):
   @classmethod
   def _read_txt(cls, input_file):
     """Reads a specified string separated text file."""
-    with open(input_file, "r") as f:
+    with open(input_file, "r", encoding="utf-8") as f:
       lines = []
       for line in f:
         line = line.split("|||||")
@@ -219,7 +219,7 @@ class AnswerSentenceLabelingProcessor(DataProcessor):
   def get_dev_examples(self, data_dir):
     """See base class."""
     lines = self._read_txt(
-        os.path.join(data_dir, "train", "train.txt"))
+        os.path.join(data_dir, "eval", "eval.txt"))
     examples = []
     for (i, line) in enumerate(lines):
       guid = "dev-%d" % (i)
@@ -571,7 +571,7 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
 
       def metric_fn(label_ids, predict, num_labels, answer_num):
         mask = tf.sequence_mask(answer_num, FLAGS.max_answer_num)
-        confusion_matrix = metrics.streaming_confusion_matrix(label_ids, predict, num_labels, weight=mask)
+        confusion_matrix = metrics.streaming_confusion_matrix(label_ids, predict, num_labels, weights=mask)
 
         return {
             "confusion_matrix": confusion_matrix
