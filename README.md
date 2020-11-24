@@ -1,1 +1,1 @@
-# Git tutorial
+BERT based answer selection model 
