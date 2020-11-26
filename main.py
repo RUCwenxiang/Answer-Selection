@@ -61,7 +61,19 @@ flags.DEFINE_bool(
 
 flags.DEFINE_bool(
     "use_crf", False,
-    "Whether use crf or softmax in predicting stage.")
+    "Use crf or use softmax.")
+
+flags.DEFINE_bool(
+    "use_lstm", False,
+    "Whether use ltsm layer or not.")
+
+flags.DEFINE_integer(
+    "lstm_hidden_dim", 128,
+    "Lstm layer's hidden state's dimension. ")
+
+flags.DEFINE_integer(
+    "num_lstm_layers", 2,
+    "Number of lstm layer")
 
 flags.DEFINE_integer(
     "max_seq_length", 128,
@@ -451,6 +463,26 @@ def crf_loss(logits, labels, num_labels, sequence_lengths):
     loss = tf.math.reduce_mean(-log_likelihood)
     return loss, transition
 
+def lstm_layer(inputs, length, is_training):
+    cell = tf.nn.rnn_cell.LSTMCell(2 * FLAGS.lstm_hidden_dim)
+    lstm_cell_fw = cell
+    lstm_cell_bw = cell
+    # dropout
+    if is_training:
+        lstm_cell_fw = tf.nn.rnn_cell.DropoutWrapper(cell, output_keep_prob=0.9)
+        lstm_cell_bw = tf.nn.rnn_cell.DropoutWrapper(cell, output_keep_prob=0.9)
+    lstm_cell_fw = tf.nn.rnn_cell.MultiRNNCell([lstm_cell_fw] * FLAGS.num_lstm_layers)
+    lstm_cell_bw = tf.nn.rnn_cell.MultiRNNCell([lstm_cell_bw] * FLAGS.num_lstm_layers)
+    # forward and backward
+    outputs, _, _ = tf.contrib.rnn.static_bidirectional_rnn(
+        lstm_cell_fw,
+        lstm_cell_bw,
+        inputs,
+        dtype=tf.float32,
+        sequence_length=length
+    )
+    return outputs
+
 def softmax_layer(logits, labels, num_labels, mask):
     logits = tf.reshape(logits, [-1, num_labels])
     labels =  tf.reshape(labels, [-1])
@@ -490,15 +522,19 @@ def create_model(bert_config, is_training, input_ids, input_mask, segment_ids, a
 
   # If you want to use the token-level output, use model.get_sequence_output()
   # instead.
-  output_layer = model.get_pooled_output() # (batch_size * max_answer_num, hidden_size)
+  outputs = model.get_pooled_output() # (batch_size * max_answer_num, hidden_size)
+  _, hidden_size = outputs.get_shape().as_list()
 
   with tf.variable_scope("loss"):
     if is_training:
       # I.e., 0.1 dropout
-      output_layer = tf.nn.dropout(output_layer, keep_prob=0.9)
+      outputs = tf.nn.dropout(outputs, keep_prob=0.9)
 
-    logits = fc_layer(output_layer, num_labels)
-    logits = tf.reshape(logits, [-1, FLAGS.max_answer_num, num_labels])
+    outputs = tf.reshape(outputs, [-1, FLAGS.max_answer_num, hidden_size])
+    if FLAGS.use_lstm:
+        outputs = lstm_layer(outputs, answer_num, is_training)
+
+    logits = fc_layer(outputs, num_labels)
 
     if FLAGS.use_crf:
         loss, trans = crf_loss(logits=logits, labels=labels, num_labels=num_labels, sequence_lengths=answer_num)
@@ -748,7 +784,6 @@ def main(_):
         writer.write(output_line)
         num_written_lines += 1
     assert num_written_lines == num_predict_examples
-
 
 if __name__ == "__main__":
   flags.mark_flag_as_required("data_dir")
