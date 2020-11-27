@@ -112,6 +112,9 @@ flags.DEFINE_float(
 flags.DEFINE_integer("save_checkpoints_steps", 50,
                      "How often to save the model checkpoint.")
 
+flags.DEFINE_integer("max_steps_without_increase", 300,
+                     "Early stopping's max steps without increase.")
+
 flags.DEFINE_integer("iterations_per_loop", 100,
                      "How many steps to make in each estimator call.")
 
@@ -474,14 +477,14 @@ def lstm_layer(inputs, length, is_training):
     lstm_cell_fw = tf.nn.rnn_cell.MultiRNNCell([lstm_cell_fw] * FLAGS.num_lstm_layers)
     lstm_cell_bw = tf.nn.rnn_cell.MultiRNNCell([lstm_cell_bw] * FLAGS.num_lstm_layers)
     # forward and backward
-    outputs, _, _ = tf.contrib.rnn.static_bidirectional_rnn(
+    (output_fw, output_bw), _ = tf.nn.bidirectional_dynamic_rnn(
         lstm_cell_fw,
         lstm_cell_bw,
         inputs,
         dtype=tf.float32,
         sequence_length=length
     )
-    return outputs
+    return tf.concat([output_fw, output_bw], axis=-1)
 
 def softmax_layer(logits, labels, num_labels, mask):
     logits = tf.reshape(logits, [-1, num_labels])
@@ -608,9 +611,14 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
       def metric_fn(label_ids, predict, num_labels, answer_num):
         mask = tf.sequence_mask(answer_num, FLAGS.max_answer_num)
         confusion_matrix = metrics.streaming_confusion_matrix(label_ids, predict, num_labels, weights=mask)
-
+        TP, FP, FN = confusion_matrix[1][1], confusion_matrix[0][1], confusion_matrix[1][0]
+        precision, recall = TP / (TP + FP), Tp / (Tp + FN)
+        f1_score = 2 * precision * recall / (precision + recall)
         return {
-            "confusion_matrix": confusion_matrix
+            "confusion_matrix": confusion_matrix,
+            "precision": precision,
+            "recall": recall,
+            "f1_score": f1_score
         }
 
       eval_metrics = (metric_fn,
@@ -705,6 +713,17 @@ def main(_):
       eval_batch_size=FLAGS.eval_batch_size,
       predict_batch_size=FLAGS.predict_batch_size)
 
+  # Early_stop
+  early_stopping_hook = tf.contrib.estimator.stop_if_no_decrease_hook(
+      estimator=estimator,
+      metric_name="f1_score",
+      max_steps_without_decrease=FLAGS.max_steps_without_decrease,
+      eval_dir="data/eval/",
+      min_steps=500,
+      run_every_secs=None,
+      run_every_steps=FLAGS.save_checkpoints_steps,
+  )
+
   if FLAGS.do_train:
     train_file = os.path.join(FLAGS.output_dir, "train.tf_record")
     file_based_convert_examples_to_features(
@@ -719,7 +738,7 @@ def main(_):
         max_answer_num=FLAGS.max_answer_num,
         is_training=True,
         drop_remainder=True)
-    estimator.train(input_fn=train_input_fn, max_steps=num_train_steps)
+    estimator.train(input_fn=train_input_fn, max_steps=num_train_steps, hooks=[early_stopping_hook])
 
   if FLAGS.do_eval:
     eval_examples = processor.get_dev_examples(FLAGS.data_dir)
@@ -748,7 +767,7 @@ def main(_):
     with tf.gfile.GFile(output_eval_file, "w") as writer:
       tf.logging.info("***** Eval results *****")
       for key in sorted(result.keys()):
-        tf.logging.info("  %s = %s", key, str(result[key]))
+        tf.logging.info("\n  %s = %s", key, str(result[key]))
         writer.write("%s = %s\n" % (key, str(result[key])))
 
   if FLAGS.do_predict:
