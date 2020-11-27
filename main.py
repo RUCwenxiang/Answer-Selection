@@ -118,32 +118,7 @@ flags.DEFINE_integer("max_steps_without_increase", 300,
 flags.DEFINE_integer("iterations_per_loop", 100,
                      "How many steps to make in each estimator call.")
 
-flags.DEFINE_bool("use_tpu", False, "Whether to use TPU or GPU/CPU.")
-
-tf.flags.DEFINE_string(
-    "tpu_name", None,
-    "The Cloud TPU to use for training. This should be either the name "
-    "used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 "
-    "url.")
-
-tf.flags.DEFINE_string(
-    "tpu_zone", None,
-    "[Optional] GCE zone where the Cloud TPU is located in. If not "
-    "specified, we will attempt to automatically detect the GCE project from "
-    "metadata.")
-
-tf.flags.DEFINE_string(
-    "gcp_project", None,
-    "[Optional] Project name for the Cloud TPU-enabled project. If not "
-    "specified, we will attempt to automatically detect the GCE project from "
-    "metadata.")
-
-tf.flags.DEFINE_string("master", None, "[Optional] TensorFlow master URL.")
-
-flags.DEFINE_integer(
-    "num_tpu_cores", 8,
-    "Only used if `use_tpu` is True. Total number of TPU cores to use.")
-
+flags.DEFINE_bool("use_one_hot_embeddings", False, "Whether to use one hot embeddings or not.")
 
 class InputExample(object):
   """A single training/test example for answer sequence labeling."""
@@ -392,7 +367,7 @@ def file_based_convert_examples_to_features(
 
 def file_based_input_fn_builder(input_file, max_answer_num, seq_length, is_training,
                                 drop_remainder):
-  """Creates an `input_fn` closure to be passed to TPUEstimator."""
+  """Creates an `input_fn` closure to be passed to Estimator."""
 
   name_to_features = {
       "input_ids": tf.FixedLenFeature([max_answer_num * seq_length], tf.int64),
@@ -549,12 +524,11 @@ def create_model(bert_config, is_training, input_ids, input_mask, segment_ids, a
 
 
 def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
-                     num_train_steps, num_warmup_steps, use_tpu,
-                     use_one_hot_embeddings):
-  """Returns `model_fn` closure for TPUEstimator."""
+                     num_train_steps, num_warmup_steps, use_one_hot_embeddings):
+  """Returns `model_fn` closure for Estimator."""
 
   def model_fn(features, labels, mode, params):  # pylint: disable=unused-argument
-    """The `model_fn` for TPUEstimator."""
+    """The `model_fn` for Estimator."""
 
     tf.logging.info("*** Features ***")
     for name in sorted(features.keys()):
@@ -574,19 +548,10 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
 
     tvars = tf.trainable_variables()
     initialized_variable_names = {}
-    scaffold_fn = None
     if init_checkpoint:
       (assignment_map, initialized_variable_names
       ) = modeling.get_assignment_map_from_checkpoint(tvars, init_checkpoint)
-      if use_tpu:
-
-        def tpu_scaffold():
-          tf.train.init_from_checkpoint(init_checkpoint, assignment_map)
-          return tf.train.Scaffold()
-
-        scaffold_fn = tpu_scaffold
-      else:
-        tf.train.init_from_checkpoint(init_checkpoint, assignment_map)
+      tf.train.init_from_checkpoint(init_checkpoint, assignment_map)
 
     tf.logging.info("**** Trainable Variables ****")
     for var in tvars:
@@ -597,22 +562,19 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
                       init_string)
 
     if mode == tf.estimator.ModeKeys.TRAIN:
-
       train_op = optimization.create_optimizer(
-          total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu)
-
-      output_spec = tf.contrib.tpu.TPUEstimatorSpec(
+          total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu=False)
+      output_spec = tf.estimator.EstimatorSpec(
           mode=mode,
           loss=total_loss,
-          train_op=train_op,
-          scaffold_fn=scaffold_fn)
-    elif mode == tf.estimator.ModeKeys.EVAL:
+          train_op=train_op)
 
+    elif mode == tf.estimator.ModeKeys.EVAL:
       def metric_fn(label_ids, predict, num_labels, answer_num):
         mask = tf.sequence_mask(answer_num, FLAGS.max_answer_num)
         confusion_matrix = metrics.streaming_confusion_matrix(label_ids, predict, num_labels, weights=mask)
         TP, FP, FN = confusion_matrix[1][1], confusion_matrix[0][1], confusion_matrix[1][0]
-        precision, recall = TP / (TP + FP), Tp / (Tp + FN)
+        precision, recall = TP / (TP + FP), TP / (TP + FN)
         f1_score = 2 * precision * recall / (precision + recall)
         return {
             "confusion_matrix": confusion_matrix,
@@ -621,18 +583,16 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
             "f1_score": f1_score
         }
 
-      eval_metrics = (metric_fn,
-                      [label_ids, predict, num_labels, answer_num])
-      output_spec = tf.contrib.tpu.TPUEstimatorSpec(
+      eval_metric_ops = metric_fn(label_ids, predict, num_labels, answer_num)
+      output_spec = tf.estimator.EstimatorSpec(
           mode=mode,
           loss=total_loss,
-          eval_metrics=eval_metrics,
-          scaffold_fn=scaffold_fn)
+          eval_metric_ops=eval_metric_ops)
+
     else:
-      output_spec = tf.contrib.tpu.TPUEstimatorSpec(
+      output_spec = tf.estimator.EstimatorSpec(
           mode=mode,
-          predictions=predict,
-          scaffold_fn=scaffold_fn)
+          predictions=predict)
     return output_spec
 
   return model_fn
@@ -668,21 +628,12 @@ def main(_):
   tokenizer = tokenization.FullTokenizer(
       vocab_file=FLAGS.vocab_file, do_lower_case=FLAGS.do_lower_case)
 
-  tpu_cluster_resolver = None
-  if FLAGS.use_tpu and FLAGS.tpu_name:
-    tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-        FLAGS.tpu_name, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
-
-  is_per_host = tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2
-  run_config = tf.contrib.tpu.RunConfig(
-      cluster=tpu_cluster_resolver,
-      master=FLAGS.master,
+  config = tf.compat.v1.ConfigProto()
+  run_config = tf.estimator.RunConfig(
       model_dir=FLAGS.output_dir,
+      session_config=config,
       save_checkpoints_steps=FLAGS.save_checkpoints_steps,
-      tpu_config=tf.contrib.tpu.TPUConfig(
-          iterations_per_loop=FLAGS.iterations_per_loop,
-          num_shards=FLAGS.num_tpu_cores,
-          per_host_input_for_training=is_per_host))
+  )
 
   train_examples = None
   num_train_steps = None
@@ -700,13 +651,10 @@ def main(_):
       learning_rate=FLAGS.learning_rate,
       num_train_steps=num_train_steps,
       num_warmup_steps=num_warmup_steps,
-      use_tpu=FLAGS.use_tpu,
-      use_one_hot_embeddings=FLAGS.use_tpu)
+      use_one_hot_embeddings=FLAGS.one_hot_embeddings)
 
-  # If TPU is not available, this will fall back to normal Estimator on CPU
-  # or GPU.
-  estimator = tf.contrib.tpu.TPUEstimator(
-      use_tpu=FLAGS.use_tpu,
+  # If GPU is not available, this will fall back to normal Estimator on CPU.
+  estimator = tf.estimator.Estimator(
       model_fn=model_fn,
       config=run_config,
       train_batch_size=FLAGS.train_batch_size,
@@ -753,7 +701,7 @@ def main(_):
     # This tells the estimator to run through the entire set.
     eval_steps = None
 
-    eval_drop_remainder = True if FLAGS.use_tpu else False
+    eval_drop_remainder = False
     eval_input_fn = file_based_input_fn_builder(
         input_file=eval_file,
         seq_length=FLAGS.max_seq_length,
@@ -783,7 +731,7 @@ def main(_):
     tf.logging.info("  Num examples = %d ", len(predict_examples))
     tf.logging.info("  Batch size = %d", FLAGS.predict_batch_size)
 
-    predict_drop_remainder = True if FLAGS.use_tpu else False
+    predict_drop_remainder = False
     predict_input_fn = file_based_input_fn_builder(
         input_file=predict_file,
         max_answer_num=FLAGS.max_answer_num,
