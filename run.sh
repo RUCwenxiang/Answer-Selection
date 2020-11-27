@@ -1,4 +1,4 @@
-export BERT_DIR=./chinese_L-12_H-768_A-12
+export BERT_DIR=./chinese_roberta_wwm_ext_L-12_H-768_A-12
 export MY_DATA_DIR=./data/
 CUDA_VISIBLE_DEVICES=3 python3 main.py \
   --task_name=answer_sent_labeling \
@@ -15,7 +15,9 @@ CUDA_VISIBLE_DEVICES=3 python3 main.py \
   --max_seq_length=128 \
   --train_batch_size=8 \
   --eval_batch_size=8 \
-  --predict_batch_size=8\
+  --predict_batch_size=8 \
   --learning_rate=5e-5 \
-  --num_train_epochs=5 \
+  --save_checkpoints_steps=50 \
+  --max_steps_without_increase=300 \
+  --num_train_epochs=1 \
   --output_dir=./checkpoint_answer_sent_labeling

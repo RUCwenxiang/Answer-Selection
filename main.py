@@ -654,7 +654,7 @@ def main(_):
       learning_rate=FLAGS.learning_rate,
       num_train_steps=num_train_steps,
       num_warmup_steps=num_warmup_steps,
-      use_one_hot_embeddings=FLAGS.one_hot_embeddings)
+      use_one_hot_embeddings=FLAGS.use_one_hot_embeddings)
 
   # If GPU is not available, this will fall back to normal Estimator on CPU.
   estimator = tf.estimator.Estimator(
