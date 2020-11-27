@@ -393,7 +393,10 @@ def file_based_input_fn_builder(input_file, max_answer_num, seq_length, is_train
 
   def input_fn(params):
     """The actual input function."""
-    batch_size = params["batch_size"]
+    if is_training:
+        batch_size = params["train_batch_size"]
+    else:
+        batch_size = params["predict_batch_size"]
 
     # For training, we want a lot of parallel reading and shuffling.
     # For eval, we want no shuffling and parallel reading doesn't matter.
@@ -657,9 +660,8 @@ def main(_):
   estimator = tf.estimator.Estimator(
       model_fn=model_fn,
       config=run_config,
-      train_batch_size=FLAGS.train_batch_size,
-      eval_batch_size=FLAGS.eval_batch_size,
-      predict_batch_size=FLAGS.predict_batch_size)
+      params={"train_batch_size": FLAGS.train_batch_size, "predict_batch_size": FLAGS.predict_batch_size}
+  )
 
   # Early_stop
   early_stopping_hook = tf.contrib.estimator.stop_if_no_decrease_hook(
