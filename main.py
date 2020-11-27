@@ -667,7 +667,7 @@ def main(_):
   early_stopping_hook = tf.contrib.estimator.stop_if_no_increase_hook(
       estimator=estimator,
       metric_name="f1_score",
-      max_steps_without_decrease=FLAGS.max_steps_without_increase,
+      max_steps_without_increase=FLAGS.max_steps_without_increase,
       eval_dir="data/eval/",
       min_steps=500,
       run_every_secs=None,
