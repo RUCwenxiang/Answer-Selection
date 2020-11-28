@@ -569,9 +569,9 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
     elif mode == tf.estimator.ModeKeys.EVAL:
       def metric_fn(label_ids, predict, num_labels, answer_num):
         mask = tf.sequence_mask(answer_num, FLAGS.max_answer_num)
-        precision = metrics.precision(label_ids, predict, num_classes=num_labels, weights=mask)
-        recall = metrics.recall(label_ids, predict, num_classes=num_labels, weights=mask)
-        f1_score = metrics.f1(label_ids, predict, num_classes=num_labels, weights=mask)
+        precision = metrics.precision(label_ids, predict, num_classes=num_labels, weights=mask, pos_indices=[1])
+        recall = metrics.recall(label_ids, predict, num_classes=num_labels, weights=mask, pos_indices=[1])
+        f1_score = metrics.f1(label_ids, predict, num_classes=num_labels, weights=mask, pos_indices=[1])
         return {
             "precision": precision,
             "recall": recall,
@@ -660,7 +660,6 @@ if __name__ == "__main__":
       estimator=estimator,
       metric_name="f1_score",
       max_steps_without_increase=FLAGS.max_steps_without_increase,
-      eval_dir="data/eval/",
       min_steps=500,
       run_every_secs=None,
       run_every_steps=FLAGS.save_checkpoints_steps,
@@ -699,7 +698,8 @@ if __name__ == "__main__":
             is_training=False,
             drop_remainder=eval_drop_remainder)
     # steps=None tells the estimator to run through the entire set.
-    eval_spec = tf.estimator.EvalSpec(input_fn=eval_input_fn, steps=None)
+    # throttle_secs=60 set minimum seconds needed to evaluate model again.
+    eval_spec = tf.estimator.EvalSpec(input_fn=eval_input_fn, steps=None, throttle_secs=60)
 
     tf.estimator.train_and_evaluate(estimator, train_spec, eval_spec)
 
