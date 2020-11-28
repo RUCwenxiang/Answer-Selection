@@ -85,17 +85,13 @@ flags.DEFINE_integer(
     "max_answer_num", 5,
     "The maximum total answer sequence length for the specified question. ")
 
-flags.DEFINE_bool("do_train", False, "Whether to run training.")
-
-flags.DEFINE_bool("do_eval", False, "Whether to run eval on the dev set.")
+flags.DEFINE_bool("do_train_and_eval", False, "Whether to run training while eval on the dev set.")
 
 flags.DEFINE_bool(
     "do_predict", False,
     "Whether to run the model in inference mode on the test set.")
 
 flags.DEFINE_integer("train_batch_size", 32, "Total batch size for training.")
-
-flags.DEFINE_integer("eval_batch_size", 8, "Total batch size for eval.")
 
 flags.DEFINE_integer("predict_batch_size", 8, "Total batch size for predict.")
 
@@ -138,7 +134,6 @@ class InputExample(object):
     self.answer_num = answer_num
     self.labels = labels
 
-
 class InputFeatures(object):
   """A single set of features of data."""
 
@@ -153,7 +148,6 @@ class InputFeatures(object):
     self.segment_ids = segment_ids  # (batch_size, max_answer_num * max_seq_len)
     self.answer_num = answer_num    # (batch_size,)
     self.label_ids = label_ids      # (batch_size, max_answer_num)
-
 
 class DataProcessor(object):
   """Base class for data converters for answer sequence labeling data sets."""
@@ -183,7 +177,6 @@ class DataProcessor(object):
         line = line.split("|||||")
         lines.append(line)
       return lines
-
 
 class AnswerSentenceLabelingProcessor(DataProcessor):
   """Processor for the answer sequence Labeling data set."""
@@ -570,7 +563,8 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
       output_spec = tf.estimator.EstimatorSpec(
           mode=mode,
           loss=total_loss,
-          train_op=train_op)
+          train_op=train_op
+      )
 
     elif mode == tf.estimator.ModeKeys.EVAL:
       def metric_fn(label_ids, predict, num_labels, answer_num):
@@ -600,14 +594,14 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
 
   return model_fn
 
-def main(_):
+if __name__ == "__main__":
   tf.logging.set_verbosity(tf.logging.INFO)
 
   processors = { "answer_sent_labeling": AnswerSentenceLabelingProcessor }
 
-  if not FLAGS.do_train and not FLAGS.do_eval and not FLAGS.do_predict:
+  if not FLAGS.do_train_and_eval and not FLAGS.do_predict:
     raise ValueError(
-        "At least one of `do_train`, `do_eval` or `do_predict' must be True.")
+        "At least one of `do_train_and_eval`, or `do_predict' must be True.")
 
   bert_config = modeling.BertConfig.from_json_file(FLAGS.bert_config_file)
 
@@ -674,7 +668,7 @@ def main(_):
       run_every_steps=FLAGS.save_checkpoints_steps,
   )
 
-  if FLAGS.do_train:
+  if FLAGS.do_train_and_eval:
     train_file = os.path.join(FLAGS.output_dir, "train.tf_record")
     file_based_convert_examples_to_features(
         train_examples, FLAGS.max_answer_num, FLAGS.max_seq_length, tokenizer, train_file)
@@ -682,43 +676,34 @@ def main(_):
     tf.logging.info("  Num examples = %d", len(train_examples))
     tf.logging.info("  Batch size = %d", FLAGS.train_batch_size)
     tf.logging.info("  Num steps = %d", num_train_steps)
+
     train_input_fn = file_based_input_fn_builder(
         input_file=train_file,
         seq_length=FLAGS.max_seq_length,
         max_answer_num=FLAGS.max_answer_num,
         is_training=True,
         drop_remainder=True)
-    estimator.train(input_fn=train_input_fn, max_steps=num_train_steps, hooks=[early_stopping_hook])
+    train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn, max_steps=num_train_steps, hooks=[early_stopping_hook])
 
-  if FLAGS.do_eval:
     eval_examples = processor.get_dev_examples(FLAGS.data_dir)
     eval_file = os.path.join(FLAGS.output_dir, "eval.tf_record")
     file_based_convert_examples_to_features(
         eval_examples, FLAGS.max_answer_num, FLAGS.max_seq_length, tokenizer, eval_file)
-
     tf.logging.info("***** Running evaluation *****")
     tf.logging.info("  Num examples = %d", len(eval_examples))
     tf.logging.info("  Batch size = %d", FLAGS.eval_batch_size)
 
-    # This tells the estimator to run through the entire set.
-    eval_steps = None
-
     eval_drop_remainder = False
     eval_input_fn = file_based_input_fn_builder(
-        input_file=eval_file,
-        seq_length=FLAGS.max_seq_length,
-        max_answer_num=FLAGS.max_answer_num,
-        is_training=False,
-        drop_remainder=eval_drop_remainder)
+            input_file=eval_file,
+            seq_length=FLAGS.max_seq_length,
+            max_answer_num=FLAGS.max_answer_num,
+            is_training=False,
+            drop_remainder=eval_drop_remainder)
+    # steps=None tells the estimator to run through the entire set.
+    eval_spec = tf.estimator.EvalSpec(input_fn=eval_input_fn, steps=None)
 
-    result = estimator.evaluate(input_fn=eval_input_fn, steps=eval_steps)
-
-    output_eval_file = os.path.join(FLAGS.output_dir, "eval_results.txt")
-    with tf.gfile.GFile(output_eval_file, "w") as writer:
-      tf.logging.info("***** Eval results *****")
-      for key in sorted(result.keys()):
-        tf.logging.info("\n  %s = %s", key, str(result[key]))
-        writer.write("%s = %s\n" % (key, str(result[key])))
+    tf.estimator.train_and_evaluate(estimator, train_spec, eval_spec)
 
   if FLAGS.do_predict:
     predict_examples = processor.get_test_examples(FLAGS.data_dir)
@@ -754,7 +739,6 @@ def main(_):
         num_written_lines += 1
     assert num_written_lines == num_predict_examples
 
-if __name__ == "__main__":
   flags.mark_flag_as_required("data_dir")
   flags.mark_flag_as_required("task_name")
   flags.mark_flag_as_required("vocab_file")
