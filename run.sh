@@ -17,5 +17,5 @@ CUDA_VISIBLE_DEVICES=3 python3 main.py \
   --learning_rate=5e-5 \
   --save_checkpoints_steps=100 \
   --max_steps_without_increase=300 \
-  --num_train_epochs=1 \
+  --num_train_epochs=20 \
   --output_dir=./checkpoint_answer_sent_labeling
