@@ -569,12 +569,10 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
     elif mode == tf.estimator.ModeKeys.EVAL:
       def metric_fn(label_ids, predict, num_labels, answer_num):
         mask = tf.sequence_mask(answer_num, FLAGS.max_answer_num)
-        confusion_matrix = metrics.streaming_confusion_matrix(label_ids, predict, num_labels, weights=mask)
-        TP, FP, FN = confusion_matrix[1][1], confusion_matrix[0][1], confusion_matrix[1][0]
-        precision, recall = TP / (TP + FP), TP / (TP + FN)
-        f1_score = 2 * precision * recall / (precision + recall)
+        precision = metrics.precision(label_ids, predict, num_classes=num_labels, weights=mask)
+        recall = metrics.recall(label_ids, predict, num_classes=num_labels, weights=mask)
+        f1_score = metrics.f1(label_ids, predict, num_classes=num_labels, weights=mask)
         return {
-            "confusion_matrix": confusion_matrix,
             "precision": precision,
             "recall": recall,
             "f1_score": f1_score
