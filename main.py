@@ -633,7 +633,7 @@ if __name__ == "__main__":
   train_examples = None
   num_train_steps = None
   num_warmup_steps = None
-  if FLAGS.do_train:
+  if FLAGS.do_train_and_eval:
     train_examples = processor.get_train_examples(FLAGS.data_dir)
     num_train_steps = int(
         len(train_examples) / FLAGS.train_batch_size * FLAGS.num_train_epochs)
@@ -689,7 +689,7 @@ if __name__ == "__main__":
         eval_examples, FLAGS.max_answer_num, FLAGS.max_seq_length, tokenizer, eval_file)
     tf.logging.info("***** Running evaluation *****")
     tf.logging.info("  Num examples = %d", len(eval_examples))
-    tf.logging.info("  Batch size = %d", FLAGS.eval_batch_size)
+    tf.logging.info("  Batch size = %d", FLAGS.predict_batch_size)
 
     eval_drop_remainder = False
     eval_input_fn = file_based_input_fn_builder(
