@@ -592,7 +592,7 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
 
   return model_fn
 
-if __name__ == "__main__":
+def main(_):
   tf.logging.set_verbosity(tf.logging.INFO)
 
   processors = { "answer_sent_labeling": AnswerSentenceLabelingProcessor }
@@ -737,6 +737,7 @@ if __name__ == "__main__":
         num_written_lines += 1
     assert num_written_lines == num_predict_examples
 
+if __name__ == "__main__":
   flags.mark_flag_as_required("data_dir")
   flags.mark_flag_as_required("task_name")
   flags.mark_flag_as_required("vocab_file")
