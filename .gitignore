@@ -2,5 +2,5 @@ data/train/train.txt
 data/eval/eval.txt
 .idea/
 __pycache__/
-chinese_L-12_H-768_A-12/
-checkpoint_answer_sent_labeling/
+chinese_*/
+model_*/
