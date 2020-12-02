@@ -1,6 +1,7 @@
 data/train/train.txt
 data/eval/eval.txt
 .idea/
+.DS_Store
 __pycache__/
 chinese_*/
 model_*/
