@@ -47,14 +47,14 @@ def produce_train_data(query_path, relay_path, train_path, eval_path, test_path,
                     f_eval.write(instance)
     else:
         with open(test_path, 'w', encoding="utf-8") as f_test:
-            for query_id in query_replays.keys():
-                sentences = query_replays[query_id]['Sentences']
+            for query_id in range(len(query_replays)):
+                sentences = query_replays[str(query_id)]['Sentences']
                 instance = "#####".join(sentences) + '|||||'.join(['', str(len(sentences))]) + "\n"
                 f_test.write(instance)
 
 if __name__ == "__main__":
-    produce_train_data(query_path="data/query.tsv", relay_path="data/reply.tsv",
-                       train_path="data/train/train.txt", eval_path="data/eval/eval.txt",
-                       test_path=None, mode="train")
-    # produce_train_data(query_path="data/test/test.query.tsv", relay_path="data/test/test.reply.tsv", train_path=None,
-    #                    eval_path=None, test_path="data/test/test.txt", mode="test")
+    #produce_train_data(query_path="data/query.tsv", relay_path="data/reply.tsv",
+    #                   train_path="data/train/train.txt", eval_path="data/eval/eval.txt",
+    #                   test_path=None, mode="train")
+    produce_train_data(query_path="data/test/test.query.tsv", relay_path="data/test/test.reply.tsv", train_path=None,
+                       eval_path=None, test_path="data/test/test.txt", mode="test")

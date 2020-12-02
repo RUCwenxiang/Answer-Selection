@@ -87,6 +87,10 @@ flags.DEFINE_integer(
 
 flags.DEFINE_bool("do_train_and_eval", False, "Whether to run training while eval on the dev set.")
 
+flags.DEFINE_bool("do_train", False, "Whether to run training on the train set.")
+
+flags.DEFINE_bool("do_eval", False, "Whether to run evaling on the dev set.")
+
 flags.DEFINE_bool(
     "do_predict", False,
     "Whether to run the model in inference mode on the test set.")
@@ -210,6 +214,21 @@ class AnswerSentenceLabelingProcessor(DataProcessor):
       question_answers = [pair.split("&&&&&") for pair in text.split("#####")]
       answer_num = int(line[1])
       labels = list(map(int, line[2].split()))
+      examples.append(
+          InputExample(guid=guid, question_answers=question_answers, answer_num=answer_num, labels=labels))
+    return examples
+
+  def get_test_examples(self, data_dir):
+    """See base class."""
+    lines = self._read_txt(
+        os.path.join(data_dir, "test", "test.txt"))
+    examples = []
+    for (i, line) in enumerate(lines):
+      guid = "test-%d" % (i)
+      text = tokenization.convert_to_unicode(line[0])
+      question_answers = [pair.split("&&&&&") for pair in text.split("#####")]
+      answer_num = int(line[1])
+      labels = [0] * answer_num 
       examples.append(
           InputExample(guid=guid, question_answers=question_answers, answer_num=answer_num, labels=labels))
     return examples
@@ -438,15 +457,14 @@ def crf_loss(logits, labels, num_labels, sequence_lengths):
     return loss, transition
 
 def lstm_layer(inputs, length, is_training):
-    cell = tf.nn.rnn_cell.LSTMCell(2 * FLAGS.lstm_hidden_dim)
-    lstm_cell_fw = cell
-    lstm_cell_bw = cell
+    lstm_cells_fw = [tf.nn.rnn_cell.BasicLSTMCell(2 * FLAGS.lstm_hidden_dim) for _ in range(FLAGS.num_lstm_layers)]
+    lstm_cells_bw = [tf.nn.rnn_cell.BasicLSTMCell(2 * FLAGS.lstm_hidden_dim) for _ in range(FLAGS.num_lstm_layers)]
     # dropout
     if is_training:
-        lstm_cell_fw = tf.nn.rnn_cell.DropoutWrapper(cell, output_keep_prob=0.9)
-        lstm_cell_bw = tf.nn.rnn_cell.DropoutWrapper(cell, output_keep_prob=0.9)
-    lstm_cell_fw = tf.nn.rnn_cell.MultiRNNCell([lstm_cell_fw] * FLAGS.num_lstm_layers)
-    lstm_cell_bw = tf.nn.rnn_cell.MultiRNNCell([lstm_cell_bw] * FLAGS.num_lstm_layers)
+        lstm_cells_fw = [tf.nn.rnn_cell.DropoutWrapper(cell, output_keep_prob=0.9) for cell in lstm_cells_fw]
+        lstm_cells_bw = [tf.nn.rnn_cell.DropoutWrapper(cell, output_keep_prob=0.9) for cell in lstm_cells_bw]
+    lstm_cell_fw = tf.nn.rnn_cell.MultiRNNCell(lstm_cells_fw)
+    lstm_cell_bw = tf.nn.rnn_cell.MultiRNNCell(lstm_cells_bw)
     # forward and backward
     (output_fw, output_bw), _ = tf.nn.bidirectional_dynamic_rnn(
         lstm_cell_fw,
@@ -515,7 +533,6 @@ def create_model(bert_config, is_training, input_ids, input_mask, segment_ids, a
         predict, _ = tf.contrib.crf.crf_decode(logits, trans, answer_num)
     else:
         loss, predict = softmax_layer(logits, labels, num_labels, input_mask)
-
     return (loss, logits, predict)
 
 
@@ -585,9 +602,10 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
           eval_metric_ops=eval_metric_ops)
 
     else:
+      predict = tf.reshape(predict, [-1, FLAGS.max_answer_num])
       output_spec = tf.estimator.EstimatorSpec(
           mode=mode,
-          predictions=predict)
+          predictions={"predict": predict, "answer_num": answer_num})
     return output_spec
 
   return model_fn
@@ -597,9 +615,9 @@ def main(_):
 
   processors = { "answer_sent_labeling": AnswerSentenceLabelingProcessor }
 
-  if not FLAGS.do_train_and_eval and not FLAGS.do_predict:
+  if not FLAGS.do_train_and_eval and not FLAGS.do_predict and not FLAGS.do_train and not FLAGS.do_eval:
     raise ValueError(
-        "At least one of `do_train_and_eval`, or `do_predict' must be True.")
+        "At least one of `do_train_and_eval`, or `do_predict', or `do_train`, or `do_eval' must be True.")
 
   bert_config = modeling.BertConfig.from_json_file(FLAGS.bert_config_file)
 
@@ -633,7 +651,7 @@ def main(_):
   train_examples = None
   num_train_steps = None
   num_warmup_steps = None
-  if FLAGS.do_train_and_eval:
+  if FLAGS.do_train_and_eval or FLAGS.do_train:
     train_examples = processor.get_train_examples(FLAGS.data_dir)
     num_train_steps = int(
         len(train_examples) / FLAGS.train_batch_size * FLAGS.num_train_epochs)
@@ -660,7 +678,7 @@ def main(_):
       estimator=estimator,
       metric_name="f1_score",
       max_steps_without_increase=FLAGS.max_steps_without_increase,
-      min_steps=500,
+      min_steps=1000,
       run_every_secs=None,
       run_every_steps=FLAGS.save_checkpoints_steps,
   )
@@ -699,9 +717,55 @@ def main(_):
             drop_remainder=eval_drop_remainder)
     # steps=None tells the estimator to run through the entire set.
     # throttle_secs=60 set minimum seconds needed to evaluate model again.
-    eval_spec = tf.estimator.EvalSpec(input_fn=eval_input_fn, steps=None, throttle_secs=60)
+    eval_spec = tf.estimator.EvalSpec(input_fn=eval_input_fn, steps=None, throttle_secs=10)
 
     tf.estimator.train_and_evaluate(estimator, train_spec, eval_spec)
+
+  if FLAGS.do_train:
+    train_file = os.path.join(FLAGS.output_dir, "train.tf_record")
+    file_based_convert_examples_to_features(
+        train_examples, FLAGS.max_answer_num, FLAGS.max_seq_length, tokenizer, train_file)
+    tf.logging.info("***** Running training *****")
+    tf.logging.info("  Num examples = %d", len(train_examples))
+    tf.logging.info("  Batch size = %d", FLAGS.train_batch_size)
+    tf.logging.info("  Num steps = %d", num_train_steps)
+    train_input_fn = file_based_input_fn_builder(
+        input_file=train_file,
+        seq_length=FLAGS.max_seq_length,
+        max_answer_num=FLAGS.max_answer_num,
+        is_training=True,
+        drop_remainder=True)
+    estimator.train(input_fn=train_input_fn, max_steps=num_train_steps)
+
+  if FLAGS.do_eval:
+    eval_examples = processor.get_dev_examples(FLAGS.data_dir)
+    eval_file = os.path.join(FLAGS.output_dir, "eval.tf_record")
+    file_based_convert_examples_to_features(
+        eval_examples, FLAGS.max_answer_num, FLAGS.max_seq_length, tokenizer, eval_file)
+
+    tf.logging.info("***** Running evaluation *****")
+    tf.logging.info("  Num examples = %d", len(eval_examples))
+    tf.logging.info("  Batch size = %d", FLAGS.predict_batch_size)
+
+    # This tells the estimator to run through the entire set.
+    eval_steps = None
+
+    eval_drop_remainder = False
+    eval_input_fn = file_based_input_fn_builder(
+        input_file=eval_file,
+        seq_length=FLAGS.max_seq_length,
+        max_answer_num=FLAGS.max_answer_num,
+        is_training=False,
+        drop_remainder=eval_drop_remainder)
+
+    result = estimator.evaluate(input_fn=eval_input_fn, steps=eval_steps)
+
+    output_eval_file = os.path.join(FLAGS.output_dir, "eval_results.txt")
+    with tf.gfile.GFile(output_eval_file, "w") as writer:
+      tf.logging.info("***** Eval results *****")
+      for key in sorted(result.keys()):
+        tf.logging.info("\n  %s = %s", key, str(result[key]))
+        writer.write("%s = %s\n" % (key, str(result[key])))
 
   if FLAGS.do_predict:
     predict_examples = processor.get_test_examples(FLAGS.data_dir)
@@ -727,13 +791,16 @@ def main(_):
     result = estimator.predict(input_fn=predict_input_fn)
 
     output_predict_file = os.path.join(FLAGS.output_dir, "test_results.tsv")
-    with tf.gfile.GFile(output_predict_file, "w") as writer:
+    with open(output_predict_file, "w") as writer:
       num_written_lines = 0
-      tf.logging.info("***** Predict results *****")
-      for (i, prediction) in enumerate(result):
+      for (query_id, prediction) in enumerate(result):
+        tf.logging.info("***** query_id: {}*****".format(query_id))
         predict = prediction["predict"]
-        output_line = "\t".join(str(class_id) for class_id in predict) + "\n"
-        writer.write(output_line)
+        answer_num = prediction["answer_num"]
+        for answer_id, class_id in enumerate(predict):
+            if answer_id < answer_num:
+                output_line = "\t".join(str(x) for x in [query_id, answer_id, class_id]) + "\n"
+                writer.write(output_line)
         num_written_lines += 1
     assert num_written_lines == num_predict_examples
 
