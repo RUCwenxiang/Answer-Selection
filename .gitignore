@@ -1,6 +1,7 @@
 data/train/train.txt
 data/eval/eval.txt
 .idea/
+.DS_Store
 __pycache__/
 chinese_L-12_H-768_A-12/
 checkpoint_answer_sent_labeling/
