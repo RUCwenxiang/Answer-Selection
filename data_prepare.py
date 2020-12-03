@@ -1,9 +1,10 @@
 # -*- coding: UTF-8 -*-
+import sys
 from collections import defaultdict
 from random import random
 
-def produce_train_data(query_path, relay_path, train_path, eval_path, test_path, mode):
 
+def produce_train_data(query_path, relay_path, train_path, eval_path, test_path, mode, train_size):
     querys = {}
     with open(query_path, encoding="utf-8") as f:
         for line in f:
@@ -31,9 +32,9 @@ def produce_train_data(query_path, relay_path, train_path, eval_path, test_path,
                 query_replays[query_id]['Labels'].append(label)
 
     print("max_answer_num: {}".format(max_answer_num))
-    print("sequence_lengths: {}".format(sorted(sequence_lengths)))
-#    for query_id in range(3):
-#        print("query_id: ", query_id, query_replays[str(query_id)])
+    print("max longest 200 sequence_lengths: {}".format(sorted(sequence_lengths[:200])))
+    for query_id in range(3):
+       print("query_id: ", query_id, query_replays[str(query_id)])
 
     if mode == "train":
         with open(train_path, 'w', encoding="utf-8") as f_train, open(eval_path, 'w', encoding="utf-8") as f_eval:
@@ -41,7 +42,7 @@ def produce_train_data(query_path, relay_path, train_path, eval_path, test_path,
                 sentences = query_replays[query_id]['Sentences']
                 labels = query_replays[query_id]['Labels']
                 instance = "#####".join(sentences) + '|||||'.join(['', str(len(labels)), ' '.join(labels)]) + "\n"
-                if random() < 0.9:
+                if random() < train_size:
                     f_train.write(instance)
                 else:
                     f_eval.write(instance)
@@ -53,8 +54,9 @@ def produce_train_data(query_path, relay_path, train_path, eval_path, test_path,
                 f_test.write(instance)
 
 if __name__ == "__main__":
-    #produce_train_data(query_path="data/query.tsv", relay_path="data/reply.tsv",
-    #                   train_path="data/train/train.txt", eval_path="data/eval/eval.txt",
-    #                   test_path=None, mode="train")
+    train_size = float(sys.argv[1])
+    produce_train_data(query_path="data/query.tsv", relay_path="data/reply.tsv",
+                      train_path="data/train/train.txt", eval_path="data/eval/eval.txt",
+                      test_path=None, mode="train", train_size=train_size)
     produce_train_data(query_path="data/test/test.query.tsv", relay_path="data/test/test.reply.tsv", train_path=None,
-                       eval_path=None, test_path="data/test/test.txt", mode="test")
+                       eval_path=None, test_path="data/test/test.txt", mode="test", train_size=None)

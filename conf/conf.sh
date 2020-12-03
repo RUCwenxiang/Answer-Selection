@@ -1,5 +1,5 @@
 # 预训练模型的相关路径
-BERT_DIR=./chinese_roberta_wwm_ext_L-12_H-768_A-12
+BERT_DIR=./chinese_roberta_wwm_ext_base
 
 VOCAB_FILE=${BERT_DIR}/vocab.txt
 
@@ -14,7 +14,7 @@ DATA_DIR=./data/
 TASK_NAME=answer_sent_labeling
 
 # 训练评估预测相关
-DO_TRAIN_AND_EVAL=false # 选点的时候会需要开开
+DO_TRAIN_AND_EVAL=false # 模型选点的时候会需要开开
 
 DO_TRAIN=true
 
@@ -49,5 +49,13 @@ MAX_STEPS_WITHOUT_INCREASE=500
 NUM_TRAIN_EPOCHS=2.3
 
 # 输出路径
+WORK_DIR=./model_add_lstm
 
-OUTPUT_DIR=./checkpoint_answer_sent_labeling_add_lstm
+# 训练集与验证集大小, train_size + eval_size = 1
+train_size=1
+
+# 是否进行模型融合
+DO_ENSEMBLE=false
+
+# 融合的模型个数
+ENSEMBLE_NUM=4

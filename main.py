@@ -45,7 +45,7 @@ flags.DEFINE_string("vocab_file", None,
                     "The vocabulary file that the BERT model was trained on.")
 
 flags.DEFINE_string(
-    "output_dir", None,
+    "work_dir", None,
     "The output directory where the model checkpoints will be written.")
 
 ## Other parameters
@@ -627,7 +627,7 @@ def main(_):
         "was only trained up to sequence length %d" %
         (FLAGS.max_seq_length, bert_config.max_position_embeddings))
 
-  tf.gfile.MakeDirs(FLAGS.output_dir)
+  tf.gfile.MakeDirs(FLAGS.work_dir)
 
   task_name = FLAGS.task_name.lower()
 
@@ -643,7 +643,7 @@ def main(_):
 
   config = tf.compat.v1.ConfigProto()
   run_config = tf.estimator.RunConfig(
-      model_dir=FLAGS.output_dir,
+      model_dir=FLAGS.work_dir,
       session_config=config,
       save_checkpoints_steps=FLAGS.save_checkpoints_steps,
   )
@@ -684,7 +684,7 @@ def main(_):
   )
 
   if FLAGS.do_train_and_eval:
-    train_file = os.path.join(FLAGS.output_dir, "train.tf_record")
+    train_file = os.path.join(FLAGS.work_dir, "train.tf_record")
     file_based_convert_examples_to_features(
         train_examples, FLAGS.max_answer_num, FLAGS.max_seq_length, tokenizer, train_file)
     tf.logging.info("***** Running training *****")
@@ -701,7 +701,7 @@ def main(_):
     train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn, max_steps=num_train_steps, hooks=[early_stopping_hook])
 
     eval_examples = processor.get_dev_examples(FLAGS.data_dir)
-    eval_file = os.path.join(FLAGS.output_dir, "eval.tf_record")
+    eval_file = os.path.join(FLAGS.work_dir, "eval.tf_record")
     file_based_convert_examples_to_features(
         eval_examples, FLAGS.max_answer_num, FLAGS.max_seq_length, tokenizer, eval_file)
     tf.logging.info("***** Running evaluation *****")
@@ -722,7 +722,7 @@ def main(_):
     tf.estimator.train_and_evaluate(estimator, train_spec, eval_spec)
 
   if FLAGS.do_train:
-    train_file = os.path.join(FLAGS.output_dir, "train.tf_record")
+    train_file = os.path.join(FLAGS.work_dir, "train.tf_record")
     file_based_convert_examples_to_features(
         train_examples, FLAGS.max_answer_num, FLAGS.max_seq_length, tokenizer, train_file)
     tf.logging.info("***** Running training *****")
@@ -739,7 +739,7 @@ def main(_):
 
   if FLAGS.do_eval:
     eval_examples = processor.get_dev_examples(FLAGS.data_dir)
-    eval_file = os.path.join(FLAGS.output_dir, "eval.tf_record")
+    eval_file = os.path.join(FLAGS.work_dir, "eval.tf_record")
     file_based_convert_examples_to_features(
         eval_examples, FLAGS.max_answer_num, FLAGS.max_seq_length, tokenizer, eval_file)
 
@@ -760,7 +760,7 @@ def main(_):
 
     result = estimator.evaluate(input_fn=eval_input_fn, steps=eval_steps)
 
-    output_eval_file = os.path.join(FLAGS.output_dir, "eval_results.txt")
+    output_eval_file = os.path.join(FLAGS.work_dir, "eval_results.txt")
     with tf.gfile.GFile(output_eval_file, "w") as writer:
       tf.logging.info("***** Eval results *****")
       for key in sorted(result.keys()):
@@ -771,7 +771,7 @@ def main(_):
     predict_examples = processor.get_test_examples(FLAGS.data_dir)
     num_predict_examples = len(predict_examples)
 
-    predict_file = os.path.join(FLAGS.output_dir, "predict.tf_record")
+    predict_file = os.path.join(FLAGS.work_dir, "predict.tf_record")
     file_based_convert_examples_to_features(predict_examples, FLAGS.max_answer_num,
                                             FLAGS.max_seq_length, tokenizer,
                                             predict_file)
@@ -790,7 +790,7 @@ def main(_):
 
     result = estimator.predict(input_fn=predict_input_fn)
 
-    output_predict_file = os.path.join(FLAGS.output_dir, "test_results.tsv")
+    output_predict_file = os.path.join(FLAGS.work_dir, "test_results.tsv")
     with open(output_predict_file, "w") as writer:
       num_written_lines = 0
       for (query_id, prediction) in enumerate(result):
@@ -809,5 +809,5 @@ if __name__ == "__main__":
   flags.mark_flag_as_required("task_name")
   flags.mark_flag_as_required("vocab_file")
   flags.mark_flag_as_required("bert_config_file")
-  flags.mark_flag_as_required("output_dir")
+  flags.mark_flag_as_required("work_dir")
   tf.app.run()
