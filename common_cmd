@@ -1,0 +1,2 @@
+nohup bash run.sh conf/conf.sh >nohup.out 2>&1 &
+grep -E "INFO:tensorflow:Saving dict|INFO:tensorflow:Loss" /path/to/file

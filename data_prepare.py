@@ -32,9 +32,9 @@ def produce_train_data(query_path, relay_path, train_path, eval_path, test_path,
                 query_replays[query_id]['Labels'].append(label)
 
     print("max_answer_num: {}".format(max_answer_num))
-    print("max longest 200 sequence_lengths: {}".format(sorted(sequence_lengths[:200])))
-    for query_id in range(3):
-       print("query_id: ", query_id, query_replays[str(query_id)])
+    print("max longest 200 sequence_lengths: {}".format(sorted(sequence_lengths[-200:])))
+    #for query_id in range(3):
+    #   print("query_id: ", query_id, query_replays[str(query_id)])
 
     if mode == "train":
         with open(train_path, 'w', encoding="utf-8") as f_train, open(eval_path, 'w', encoding="utf-8") as f_eval:

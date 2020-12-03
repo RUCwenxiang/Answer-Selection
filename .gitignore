@@ -5,3 +5,5 @@ data/eval/eval.txt
 __pycache__/
 chinese_*/
 model_*/
+nohup.out
+submission.tsv

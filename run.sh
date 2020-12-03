@@ -28,15 +28,42 @@ function train_model()
     --work_dir=${WORK_DIR} \
     >> ${log_file} 2>&1
 }
+
 config_file=$1
 source ${config_file}
 
 if [ ${DO_ENSEMBLE} == "true" ]; then
   echo "TODO"
 else
+  mkdir -p ${WORK_DIR}
   log_file=${WORK_DIR}/run.log
+  
   # 生成训练集，测试集
   python3 data_prepare.py ${train_size} >${log_file} 2>&1
+  error=$?
+  if [ ${error} -gt 0 ]; then
+    echo "ERROR: data prepare meets error!" >>${log_file}
+    exit 0 
+  fi
+  echo "LOG: data prepare successfully!" >>${log_file}  
+  
+  # 训练模型
   train_model ${WORK_DIR} ${log_file}
-  python3 write_result.py ${WORK_DIR}/test_results.tsv >>{log_file} 2>&1
+  error=$?
+  if [ ${error} -gt 0 ]; then
+    echo "ERROR: train model meets error!" >>${log_file}
+    exit 0 
+  fi
+  echo "LOG: train model successfully!" >>${log_file}  
+  # 写结果
+  python3 write_result.py ${WORK_DIR}/test_results.tsv >>${log_file} 2>&1
+  error=$?
+  if [ ${error} -gt 0 ]; then
+    echo "ERROR: write result meets error!" >>${log_file}
+    exit 0 
+  fi
+  echo "LOG: write result successfully!" >>${log_file}  
+  
+  # 上传结果
+  obsutil cp submission.tsv obs://sprs-data-sg/NeverDelete/wenxiang/misc/ 
 fi

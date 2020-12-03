@@ -46,10 +46,10 @@ SAVE_CHECKPOINTS_STEPS=100
 
 MAX_STEPS_WITHOUT_INCREASE=500
 
-NUM_TRAIN_EPOCHS=2.3
+NUM_TRAIN_EPOCHS=4.6
 
 # 输出路径
-WORK_DIR=./model_add_lstm
+WORK_DIR=model_add_lstm
 
 # 训练集与验证集大小, train_size + eval_size = 1
 train_size=1
