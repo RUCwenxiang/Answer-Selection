@@ -2,6 +2,7 @@ data/train/train.txt
 data/eval/eval.txt
 submission.tsv
 nohup.out
+*.log
 
 chinese_*/
 model_*/

@@ -804,7 +804,7 @@ def main(_):
             tf.logging.info("***** query_id: {}*****".format(query_id))
         predict = prediction["predict"]
         answer_num = prediction["answer_num"]
-        positive_probabilities = prediction["positive_probabilities"]
+        positive_probabilities = prediction["positive_probabilities"][:answer_num]
         pos_prob_list.extend(positive_probabilities)
         for answer_id, class_id in enumerate(predict):
             if answer_id < answer_num:

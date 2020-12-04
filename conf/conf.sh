@@ -16,9 +16,9 @@ TASK_NAME=answer_sent_labeling
 # 训练评估预测相关
 DO_TRAIN_AND_EVAL=false # 模型选点的时候会需要开开
 
-DO_TRAIN=true
+DO_TRAIN=false
 
-DO_EVAL=true
+DO_EVAL=false
 
 DO_PREDICT=true
 
@@ -44,9 +44,9 @@ LEARNING_RATE=5e-5
 
 SAVE_CHECKPOINTS_STEPS=100
 
-MAX_STEPS_WITHOUT_INCREASE=500
+MAX_STEPS_WITHOUT_INCREASE=200
 
-NUM_TRAIN_EPOCHS=4.6
+NUM_TRAIN_EPOCHS=2.3
 
 # 输出路径
 WORK_DIR=model_add_lstm
@@ -55,7 +55,7 @@ WORK_DIR=model_add_lstm
 TRAIN_SIZE=1
 
 # 是否进行模型融合
-DO_ENSEMBLE=false
+DO_ENSEMBLE=true
 
 # 融合的模型个数
 ENSEMBLE_NUM=4
