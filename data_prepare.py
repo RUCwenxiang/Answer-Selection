@@ -3,7 +3,6 @@ import sys
 from collections import defaultdict
 from random import random
 
-
 def produce_train_data(query_path, relay_path, train_path, eval_path, test_path, mode, train_size):
     querys = {}
     with open(query_path, encoding="utf-8") as f:

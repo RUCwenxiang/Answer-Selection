@@ -1,6 +1,6 @@
 function train_model()
 {
-  WORK_DIR=$1
+  work_dir=$1
   log_file=$2
   CUDA_VISIBLE_DEVICES=${CUDA_DEVICE_ID} python3 main.py \
     --task_name=${TASK_NAME} \
@@ -25,45 +25,68 @@ function train_model()
     --num_train_epochs=${NUM_TRAIN_EPOCHS} \
     --do_ensemble=${DO_ENSEMBLE} \
     --ensemble_num=${ENSEMBLE_NUM} \
-    --work_dir=${WORK_DIR} \
+    --work_dir=${work_dir} \
     >> ${log_file} 2>&1
 }
 
+function pipeline()
+{
+  work_dir=$1
+  do_ensemble=$2
+  log_file=$3
+
+  # 生成文件路径
+  mkdir -p ${work_dir}
+
+  # 训练模型
+  train_model ${work_dir} ${log_file}
+  logging $? ${log_file} "ERROR: train model meets error!" "LOG: train model successfully!"
+
+  # 写结果
+  if [ ${do_ensemble} == "false" ]; then
+    python3 -c "from utils import result_file_to_submission_file;
+      result_file_to_submission_file(output_predict_file=${work_dir}/test_results.tsv)" >>${log_file} 2>&1
+    logging $? ${log_file} "ERROR: write result meets error!" "LOG: write result successfully!"
+  fi
+}
+
+function logging()
+{
+  error=$1
+  log_file=$2
+  error_info=$3
+  correct_info=$4
+  if [ ${error} -gt 0 ]; then
+    echo ${error_info} >>${log_file}
+  fi
+  echo ${correct_info} >>${log_file}
+}
+
+function data_prepare()
+{
+  train_size=$1
+  log_file=$2
+  # 生成训练集，测试集
+  python3 data_prepare.py ${train_size} >${log_file} 2>&1
+  logging $? ${log_file} "ERROR: data prepare meets error!" "LOG: data prepare successfully!"
+}
 config_file=$1
 source ${config_file}
 
 if [ ${DO_ENSEMBLE} == "true" ]; then
-  echo "TODO"
+  log_file=ensemble_run.log
+  data_prepare ${TRAIN_SIZE} ${log_file}
+  for((i=1;i<ENSEMBLE_NUM;i++)); do
+    work_dir=${WORK_DIR}-$i
+    pipeline ${work_dir} ${DO_ENSEMBLE} ${log_file}
+  done
+  python3 -c "from utils import ensemble_results_to_submission_file;
+    ensemble_results_to_submission_file(model_name=${WORK_DIR}, model_num=${ENSEMBLE_NUM})" >>${log_file} 2>&1
+  logging $? ${log_file} "ERROR: write ensemble model's results meets error!" "LOG: write ensemble model's results successfully!"
 else
-  mkdir -p ${WORK_DIR}
   log_file=${WORK_DIR}/run.log
-  
-  # 生成训练集，测试集
-  python3 data_prepare.py ${train_size} >${log_file} 2>&1
-  error=$?
-  if [ ${error} -gt 0 ]; then
-    echo "ERROR: data prepare meets error!" >>${log_file}
-    exit 0 
-  fi
-  echo "LOG: data prepare successfully!" >>${log_file}  
-  
-  # 训练模型
-  train_model ${WORK_DIR} ${log_file}
-  error=$?
-  if [ ${error} -gt 0 ]; then
-    echo "ERROR: train model meets error!" >>${log_file}
-    exit 0 
-  fi
-  echo "LOG: train model successfully!" >>${log_file}  
-  # 写结果
-  python3 write_result.py ${WORK_DIR}/test_results.tsv >>${log_file} 2>&1
-  error=$?
-  if [ ${error} -gt 0 ]; then
-    echo "ERROR: write result meets error!" >>${log_file}
-    exit 0 
-  fi
-  echo "LOG: write result successfully!" >>${log_file}  
-  
-  # 上传结果
-  obsutil cp submission.tsv obs://sprs-data-sg/NeverDelete/wenxiang/misc/ 
+  data_prepare ${TRAIN_SIZE} ${log_file}
+  pipeline ${WORK_DIR} ${DO_ENSEMBLE} ${log_file}
 fi
+# 上传结果
+obsutil cp submission.tsv obs://sprs-data-sg/NeverDelete/wenxiang/misc/

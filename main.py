@@ -17,6 +17,7 @@
 import collections
 import os
 
+import numpy as np
 import tensorflow as tf
 from bert import modeling
 from bert import optimization
@@ -527,13 +528,15 @@ def create_model(bert_config, is_training, input_ids, input_mask, segment_ids, a
         outputs = lstm_layer(outputs, answer_num, is_training)
 
     logits = fc_layer(outputs, num_labels)
+    # 预测为正例的概率, 模型融合的时候可能会用到
+    positive_probabilities = tf.math.softmax(logits, axis=-1)[:,:,1]
 
     if FLAGS.use_crf:
         loss, trans = crf_loss(logits=logits, labels=labels, num_labels=num_labels, sequence_lengths=answer_num)
         predict, _ = tf.contrib.crf.crf_decode(logits, trans, answer_num)
     else:
         loss, predict = softmax_layer(logits, labels, num_labels, input_mask)
-    return (loss, logits, predict)
+    return (loss, logits, positive_probabilities, predict)
 
 
 def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
@@ -555,7 +558,7 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
 
     is_training = (mode == tf.estimator.ModeKeys.TRAIN)
 
-    (total_loss, logits, predict) = create_model(
+    (total_loss, logits, positive_probabilities, predict) = create_model(
         bert_config, is_training, input_ids, input_mask, segment_ids,
         answer_num, label_ids, num_labels, use_one_hot_embeddings)
 
@@ -605,7 +608,8 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
       predict = tf.reshape(predict, [-1, FLAGS.max_answer_num])
       output_spec = tf.estimator.EstimatorSpec(
           mode=mode,
-          predictions={"predict": predict, "answer_num": answer_num})
+          predictions={"predict": predict, "answer_num": answer_num,
+                       "positive_probabilities": positive_probabilities})
     return output_spec
 
   return model_fn
@@ -716,7 +720,7 @@ def main(_):
             is_training=False,
             drop_remainder=eval_drop_remainder)
     # steps=None tells the estimator to run through the entire set.
-    # throttle_secs=60 set minimum seconds needed to evaluate model again.
+    # throttle_secs set minimum seconds needed to evaluate model again.
     eval_spec = tf.estimator.EvalSpec(input_fn=eval_input_fn, steps=None, throttle_secs=10)
 
     tf.estimator.train_and_evaluate(estimator, train_spec, eval_spec)
@@ -791,17 +795,23 @@ def main(_):
     result = estimator.predict(input_fn=predict_input_fn)
 
     output_predict_file = os.path.join(FLAGS.work_dir, "test_results.tsv")
+    output_pos_prob_np_file = os.path.join(FLAGS.work_dir, "test_results.npy")
+    pos_prob_list = []
     with open(output_predict_file, "w") as writer:
       num_written_lines = 0
       for (query_id, prediction) in enumerate(result):
-        tf.logging.info("***** query_id: {}*****".format(query_id))
+        if query_id % 200 == 0:
+            tf.logging.info("***** query_id: {}*****".format(query_id))
         predict = prediction["predict"]
         answer_num = prediction["answer_num"]
+        positive_probabilities = prediction["positive_probabilities"]
+        pos_prob_list.extend(positive_probabilities)
         for answer_id, class_id in enumerate(predict):
             if answer_id < answer_num:
                 output_line = "\t".join(str(x) for x in [query_id, answer_id, class_id]) + "\n"
                 writer.write(output_line)
         num_written_lines += 1
+    np.save(output_pos_prob_np_file, np.array(pos_prob_list))
     assert num_written_lines == num_predict_examples
 
 if __name__ == "__main__":

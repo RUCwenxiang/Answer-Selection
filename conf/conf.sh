@@ -52,7 +52,7 @@ NUM_TRAIN_EPOCHS=4.6
 WORK_DIR=model_add_lstm
 
 # 训练集与验证集大小, train_size + eval_size = 1
-train_size=1
+TRAIN_SIZE=1
 
 # 是否进行模型融合
 DO_ENSEMBLE=false

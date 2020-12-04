@@ -1,9 +1,11 @@
 data/train/train.txt
 data/eval/eval.txt
-.idea/
-.DS_Store
-__pycache__/
+submission.tsv
+nohup.out
+
 chinese_*/
 model_*/
-nohup.out
-submission.tsv
+
+.DS_Store
+.idea/
+__pycache__/
