@@ -2,13 +2,15 @@ import pandas as pd
 import numpy as np
 
 def result_to_submission_file(results_type, results):
+    assert results_type in ["file", "numpy_array"], "results_type should be one of 'file' or 'numpy_array'"
     # 需要用到样例提交的文件来进行修改结果文件
     source = pd.read_csv("sample_submission.tsv", header=None, sep="\t", names=["q_id", "a_id", "label"])
     if results_type == "file":
-        target = pd.read_csv(results, header=None, sep="\t", names=["q_id", "a_id", "label"])
-        source["label"] = target["label"]
+        target = pd.read_csv(results, header=None, sep="\t", names=["q_id", "a_id", "label"])["label"]
     else:
-        source["label"] = results
+        target = results
+    assert len(target) == len(source["label"])
+    source["label"] = target
     source.to_csv("submission.tsv", header=None, sep='\t', index=False)
 
 def ensemble_results_to_submission_file(model_name, model_num):
