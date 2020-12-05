@@ -1,4 +1,13 @@
-function train_model()
+function data_prepare()
+{
+  train_size=$1
+  log_file=$2
+  # 生成训练集，测试集
+  python3 data_prepare.py ${train_size} >${log_file} 2>&1
+  logging $? ${log_file} "ERROR: data prepare meets error!" "LOG: data prepare successfully!"
+}
+
+function run_model()
 {
   work_dir=$1
   log_file=$2
@@ -29,25 +38,12 @@ function train_model()
     >> ${log_file} 2>&1
 }
 
-function pipeline()
+function upload_submission()
 {
-  work_dir=$1
-  do_ensemble=$2
-  log_file=$3
-
-  # 生成文件路径
-  mkdir -p ${work_dir}
-
-  # 训练模型
-  train_model ${work_dir} ${log_file}
-  logging $? ${log_file} "ERROR: train model meets error!" "LOG: train model successfully!"
-
-  # 写结果
-  if [ ${do_ensemble} == "false" ]; then
-    python3 -c "from utils import result_file_to_submission_file;\
-result_file_to_submission_file(results_type='file', results='${work_dir}/test_results.tsv')" >>${log_file} 2>&1
-    logging $? ${log_file} "ERROR: write result meets error!" "LOG: write result successfully!"
-  fi
+  log_file=$1
+  # 上传结果
+  obsutil cp submission.tsv obs://sprs-data-sg/NeverDelete/wenxiang/misc/
+  logging $? ${log_file} "ERROR: upload submission to obs meets error!" "LOG: upload submission to obs successfully!"
 }
 
 function logging()
@@ -64,14 +60,27 @@ function logging()
   fi
 }
 
-function data_prepare()
+function pipeline()
 {
-  train_size=$1
-  log_file=$2
-  # 生成训练集，测试集
-  python3 data_prepare.py ${train_size} >${log_file} 2>&1
-  logging $? ${log_file} "ERROR: data prepare meets error!" "LOG: data prepare successfully!"
+  work_dir=$1
+  do_ensemble=$2
+  log_file=$3
+
+  # 生成文件路径
+  mkdir -p ${work_dir}
+
+  # 训练模型
+  run_model ${work_dir} ${log_file}
+  logging $? ${log_file} "ERROR: train model meets error!" "LOG: train model successfully!"
+
+  # 写结果
+  if [ ${do_ensemble} == "false" ]; then
+    python3 -c "from utils import result_file_to_submission_file;\
+result_file_to_submission_file(results_type='file', results='${work_dir}/test_results.tsv')" >>${log_file} 2>&1
+    logging $? ${log_file} "ERROR: write result meets error!" "LOG: write result successfully!"
+  fi
 }
+
 config_file=$1
 source ${config_file}
 
@@ -85,11 +94,10 @@ if [ ${DO_ENSEMBLE} == "true" ]; then
   python3 -c "from utils import ensemble_results_to_submission_file;\
 ensemble_results_to_submission_file(model_name='${WORK_DIR}', model_num=${ENSEMBLE_NUM})" >>${log_file} 2>&1
   logging $? ${log_file} "ERROR: write ensemble model's results meets error!" "LOG: write ensemble model's results successfully!"
+  upload_submission ${log_file}
 else
   log_file=${WORK_DIR}/run.log
   data_prepare ${TRAIN_SIZE} ${log_file}
   pipeline ${WORK_DIR} ${DO_ENSEMBLE} ${log_file}
+  upload_submission ${log_file}
 fi
-# 上传结果
-obsutil cp submission.tsv obs://sprs-data-sg/NeverDelete/wenxiang/misc/
-logging $? ${log_file} "ERROR: write ensemble model's results meets error!" "LOG: write ensemble model's results successfully!"
