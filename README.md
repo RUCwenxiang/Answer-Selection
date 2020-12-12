@@ -1,4 +1,4 @@
-###BERT based answer selection model
+> ### BERT based answer selection model
 - 模型框架  
   - Roberta/Bert/Macbert + Bi-LSTM + CRF/Softmax
 - 模型融合
